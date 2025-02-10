@@ -54,3 +54,4 @@
 /home/lucas/prometheus/aulas/app/obj/Debug/net8.0/ref/app.dll
 /home/lucas/prometheus/aulas/app/bin/Debug/net8.0/Prometheus.NetStandard.dll
 /home/lucas/prometheus/aulas/app/bin/Debug/net8.0/Prometheus.AspNetCore.dll
+/home/lucas/prometheus/aulas/app/obj/Debug/net8.0/app.sourcelink.json
