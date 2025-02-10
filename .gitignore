@@ -1,0 +1,16 @@
+bin/
+obj/
+*.user
+*.suo
+*.vscode
+*.dll
+*.exe
+*.pdb
+*.log
+*.tmp
+*.cache
+*.ide
+*.swp
+Thumbs.db
+.DS_Store
+.env
