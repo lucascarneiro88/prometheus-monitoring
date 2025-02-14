@@ -1,85 +1,82 @@
 ﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Prometheus;
 using System;
-using System.Diagnostics;
+using System.Threading;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Adiciona serviços necessários
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Criação de um contador de requisições com label 'statusCode'
-var requestCounter = Metrics.CreateCounter("aula_request_total", "Contador de requests", new CounterConfiguration
+// Contador de requisições com statusCode
+var contadorRequisicoes = Metrics.CreateCounter("aula_requests_total", "Contador de requests", new CounterConfiguration
 {
     LabelNames = new[] { "statusCode" }
 });
 
-// Criação de um Gauge para monitorar o número de bytes processados
-var BytesProcessed = Metrics.CreateGauge("aula_bytes_processed", "Bytes processados pelo servidor.");
+// Gauge para usuários logados
+var usuariosOnline = Metrics.CreateGauge("aula_usuarios_logados_total", "Número de usuários logados no momento");
 
-// Criação de um Gauge para monitorar memória livre, com valor aleatório
-var freeBytes = Metrics.CreateGauge("free_bytes", "Memória livre em bytes.");
+// Histograma para tempo de resposta
+var tempoDeResposta = Metrics.CreateHistogram("aula_request_duration_seconds", "Tempo de resposta da API");
 
-// Criação de um Histograma para monitorar o tempo de resposta da API
-var responseDurationHistogram = Metrics.CreateHistogram("aula_response_duration_seconds", "Histograma do tempo de resposta da API em segundos.", new HistogramConfiguration
+bool zeraUsuariosLogados = false;
+Random random = new Random();
+
+// Função para simular distribuição estatística semelhante ao randn_bm do JS
+static double RandnBm(double min, double max, double skew)
 {
-    // Definindo buckets para medir o tempo de resposta
-    Buckets = Histogram.LinearBuckets(start: 0.01, width: 0.1, count: 20) // Cada bucket de 0.1 segundos, começando em 0.01 segundos
-});
+    Random random = new Random();
+    double u = 0, v = 0;
+    while (u == 0) u = random.NextDouble();
+    while (v == 0) v = random.NextDouble();
+    double num = Math.Sqrt(-2.0 * Math.Log(u)) * Math.Cos(2.0 * Math.PI * v);
+    num = num / 10.0 + 0.5;
+    if (num > 1 || num < 0) return RandnBm(min, max, skew);
+    num = Math.Pow(num, skew);
+    num *= max - min;
+    num += min;
+    return num;
+}
 
-app.UseRouting();
-app.UseEndpoints(endpoints =>
+// Atualiza métricas a cada 150ms
+var timer = new Timer(_ =>
 {
-    // Endpoint para expor as métricas do Prometheus
-    endpoints.MapMetrics();
+    var statusCode = (random.Next(0, 100) < 5) ? "500" : "200";
+    contadorRequisicoes.Labels(statusCode).Inc();
 
-    // Endpoint para incrementar o contador a cada requisição à raiz
-    app.MapGet("/", () =>
-    {
-        // Inicia o cronômetro para medir o tempo de resposta
-        var stopwatch = Stopwatch.StartNew();
+    var usuariosLogados = (zeraUsuariosLogados) ? 0 : 500 + random.Next(0, 50);
+    usuariosOnline.Set(usuariosLogados);
 
-        // Simulando um processamento e medindo o tempo de resposta
-        Console.WriteLine("Requisição recebida! Incrementando o contador...");
-        requestCounter.Labels("200").Inc(); // Incrementa o contador com o statusCode "200"
+    var tempoObservado = RandnBm(0, 3, 4);
+    tempoDeResposta.Observe(tempoObservado);
+}, null, 0, 150);
 
-        // Processamento fictício
-        var random = new Random();
-        var bytesProcessedThisRequest = random.Next(500, 1000); // Exemplo de bytes processados entre 500 e 1000
-        BytesProcessed.Inc(bytesProcessedThisRequest); // Incrementa o Gauge de bytes processados
-
-        // Finaliza o cronômetro
-        stopwatch.Stop();
-
-        // Registra o tempo de resposta no histograma
-        responseDurationHistogram.Observe(stopwatch.Elapsed.TotalSeconds);
-
-        return "Hello World! Meus Amigos"; 
-    });
-
-    // Atualiza a métrica de memória livre a cada 5 segundos com um valor aleatório
-    var randomMemory = new Random();
-    var timer = new System.Threading.Timer(e =>
-    {
-        var randomFreeBytes = randomMemory.Next(0, 1000000000); // Valor aleatório até 1 bilhão de bytes
-        freeBytes.Set(randomFreeBytes); // Atualiza a métrica de memória livre
-        Console.WriteLine($"Memória livre (em bytes): {randomFreeBytes}");
-    }, null, 0, 5000); // Executa a cada 5 segundos
-});
-
-// Servir arquivos estáticos (como favicon.ico)
-app.UseStaticFiles();
-
-// Configuração do Swagger
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Inicia o servidor na porta 3000
-app.Run("http://localhost:3000");
+// 🚀 REGISTRANDO ROTAS NO NÍVEL SUPERIOR
+app.MapGet("/", () => "Hello World!");
+app.MapGet("/zera-usuarios-logados", () =>
+{
+    zeraUsuariosLogados = true;
+    return "OK";
+});
+app.MapGet("/retorna-usuarios-logados", () =>
+{
+    zeraUsuariosLogados = false;
+    return "OK";
+});
+
+// Endpoint para métricas do Prometheus
+app.UseMetricServer();
+
+app.Run("http://localhost:3030");
